@@ -31,8 +31,8 @@ const RATING_BUCKETS = [
 ];
 
 const PAGE_SIZE = 10;
-const CONCURRENT_PAGES = 10;
-const BATCH_DELAY_MS = 600;
+const CONCURRENT_PAGES = 15;
+const BATCH_DELAY_MS = 400;
 const MAX_OFFSET = 9900;
 
 function buildXUA() {
