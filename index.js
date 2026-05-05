@@ -63,9 +63,12 @@ async function taptapGet(path, params) {
   return json.data;
 }
 
-// ─── Fetch app info ───
-async function fetchAppInfo(appId) {
-  const data = await taptapGet("app/v4/detail", { id: appId });
+// ─── App detail (full TapTap `app/v4/detail` payload) — BE dùng cho tag / developer / publisher trong prompt ───
+async function fetchAppDetailRaw(appId) {
+  return await taptapGet("app/v4/detail", { id: appId });
+}
+
+function appInfoFromDetail(data, appId) {
   const icon = data.icon;
   const stat = data.stat;
   const rating = stat?.rating;
@@ -76,6 +79,11 @@ async function fetchAppInfo(appId) {
     fansCount: stat?.fans_count ?? null,
     reserveCount: stat?.reserve_count ?? null,
   };
+}
+
+async function fetchAppInfo(appId) {
+  const data = await fetchAppDetailRaw(appId);
+  return appInfoFromDetail(data, appId);
 }
 
 // ─── Fetch reviews ───
@@ -238,10 +246,12 @@ app.get("/api/full/:appId", authGuard, async (req, res) => {
 
     const keepAlive = setInterval(() => res.write(" "), 10_000);
 
-    const [appInfo, reviews] = await Promise.all([
-      fetchAppInfo(appId),
+    // Một lần app/v4/detail + reviews song song — đính kèm detailRaw để Sourcing BE (pickTapTapDetailFromProxyBundle) lấy 厂商/tags.
+    const [detailRaw, reviews] = await Promise.all([
+      fetchAppDetailRaw(appId),
       fetchAllReviews(appId),
     ]);
+    const appInfo = appInfoFromDetail(detailRaw, appId);
 
     clearInterval(keepAlive);
     res.end(JSON.stringify({
@@ -249,6 +259,7 @@ app.get("/api/full/:appId", authGuard, async (req, res) => {
       data: {
         appId,
         appInfo,
+        detailRaw,
         totalCollected: reviews.length,
         reviews,
       },
