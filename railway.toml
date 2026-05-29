@@ -1,0 +1,9 @@
+# Railway — TapTap proxy (giữ online tối ưu free tier ~$1/tháng)
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+# Không scale nhiều replica — tiết kiệm credit
+numReplicas = 1
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

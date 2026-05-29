@@ -9,6 +9,41 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY || "";
 
+/** Ping /health định kỳ để tránh sleep (Railway free). Tắt: KEEP_ALIVE_INTERVAL_MS=0 */
+const KEEP_ALIVE_MS = parseInt(process.env.KEEP_ALIVE_INTERVAL_MS ?? "240000", 10);
+
+function resolvePublicBaseUrl() {
+  if (process.env.PUBLIC_URL?.trim()) return process.env.PUBLIC_URL.trim().replace(/\/$/, "");
+  const domain = process.env.RAILWAY_PUBLIC_DOMAIN?.trim();
+  if (domain) return `https://${domain}`;
+  return null;
+}
+
+function startKeepAlive() {
+  if (!Number.isFinite(KEEP_ALIVE_MS) || KEEP_ALIVE_MS <= 0) {
+    console.log("[keep-alive] disabled (KEEP_ALIVE_INTERVAL_MS=0)");
+    return;
+  }
+  const base = resolvePublicBaseUrl();
+  if (!base) {
+    console.log(
+      "[keep-alive] skipped — set PUBLIC_URL or deploy on Railway (RAILWAY_PUBLIC_DOMAIN) for self-ping",
+    );
+    return;
+  }
+  const url = `${base}/health`;
+  const headers = API_KEY ? { "x-api-key": API_KEY } : {};
+  console.log(`[keep-alive] ping ${url} every ${KEEP_ALIVE_MS / 1000}s`);
+  setInterval(async () => {
+    try {
+      const res = await fetch(url, { headers, signal: AbortSignal.timeout(12_000) });
+      if (!res.ok) console.warn(`[keep-alive] ${res.status} ${res.statusText}`);
+    } catch (e) {
+      console.warn("[keep-alive] ping failed:", e instanceof Error ? e.message : e);
+    }
+  }, KEEP_ALIVE_MS);
+}
+
 // ─── Auth middleware ───
 function authGuard(req, res, next) {
   if (API_KEY && req.headers["x-api-key"] !== API_KEY) {
@@ -272,4 +307,5 @@ app.get("/api/full/:appId", authGuard, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`TapTap Proxy running on port ${PORT}`);
   console.log(`Auth: ${API_KEY ? "enabled" : "disabled (set API_KEY to enable)"}`);
+  startKeepAlive();
 });
