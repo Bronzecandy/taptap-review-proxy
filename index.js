@@ -121,6 +121,22 @@ async function fetchAppInfo(appId) {
   return appInfoFromDetail(data, appId);
 }
 
+// ─── Bài đăng chính thức (公告/动态) — BE dùng để bắt lịch ra mắt / đợt test mới ───
+async function fetchOfficialPosts(appId, limit) {
+  const groupData = await taptapGet("group/v1/detail", { app_id: appId });
+  const groupId = groupData?.group?.id;
+  if (!groupId) return [];
+  const feed = await taptapGet("feed/v7/by-group", { group_id: groupId, type: "official", limit });
+  return (feed.list ?? [])
+    .map((item) => item?.moment)
+    .filter(Boolean)
+    .map((m) => ({
+      title: m.topic?.title ?? "",
+      summary: m.topic?.summary ?? "",
+      date: m.publish_time ? new Date(m.publish_time * 1000).toISOString().slice(0, 10) : null,
+    }));
+}
+
 // ─── Fetch reviews ───
 async function fetchPage(appId, from) {
   try {
@@ -238,6 +254,29 @@ app.get("/api/app-info/:appId", authGuard, async (req, res) => {
     if (isNaN(appId)) return res.status(400).json({ error: "Invalid appId" });
     const info = await fetchAppInfo(appId);
     res.json({ success: true, data: info });
+  } catch (err) {
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/detail/:appId", authGuard, async (req, res) => {
+  try {
+    const appId = parseInt(req.params.appId, 10);
+    if (isNaN(appId)) return res.status(400).json({ error: "Invalid appId" });
+    const detailRaw = await fetchAppDetailRaw(appId);
+    res.json({ success: true, data: { appId, detailRaw, appInfo: appInfoFromDetail(detailRaw, appId) } });
+  } catch (err) {
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/official-posts/:appId", authGuard, async (req, res) => {
+  try {
+    const appId = parseInt(req.params.appId, 10);
+    if (isNaN(appId)) return res.status(400).json({ error: "Invalid appId" });
+    const limit = Math.min(20, Math.max(1, parseInt(String(req.query.limit ?? "10"), 10) || 10));
+    const posts = await fetchOfficialPosts(appId, limit);
+    res.json({ success: true, data: { appId, posts } });
   } catch (err) {
     res.status(502).json({ success: false, error: err.message });
   }
