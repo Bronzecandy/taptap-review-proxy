@@ -137,6 +137,24 @@ async function fetchOfficialPosts(appId, limit) {
     }));
 }
 
+// ─── Tìm game theo từ khóa — BE dùng cho ô chọn game khi tạo đợt test ───
+async function searchApps(kw, limit) {
+  const data = await taptapGet("app-search/v1/by-keyword", { kw, from: 0, limit });
+  return (data.list ?? []).map((app) => ({
+    id: app.id,
+    title: app.title ?? "",
+    iconUrl: app.icon?.url ?? app.icon?.medium_url ?? null,
+    tags: (app.tags ?? []).map((t) => t.value).filter(Boolean),
+    developers: (app.developers ?? []).map((d) => ({ name: d.name, type: d.type })),
+    platforms: (app.supported_platforms ?? []).map((p) => p.key),
+    console: Boolean(app.is_console_game),
+    rating: app.stat?.rating?.score ?? null,
+    reserveCount: app.stat?.reserve_count ?? null,
+    fansCount: app.stat?.fans_count ?? null,
+    downloads: app.stat?.hits_total ?? null,
+  }));
+}
+
 // ─── Fetch reviews ───
 async function fetchPage(appId, from) {
   try {
@@ -265,6 +283,17 @@ app.get("/api/detail/:appId", authGuard, async (req, res) => {
     if (isNaN(appId)) return res.status(400).json({ error: "Invalid appId" });
     const detailRaw = await fetchAppDetailRaw(appId);
     res.json({ success: true, data: { appId, detailRaw, appInfo: appInfoFromDetail(detailRaw, appId) } });
+  } catch (err) {
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/search", authGuard, async (req, res) => {
+  try {
+    const kw = String(req.query.kw ?? "").trim();
+    if (!kw) return res.status(400).json({ success: false, error: "Missing kw" });
+    const limit = Math.min(20, Math.max(1, parseInt(String(req.query.limit ?? "10"), 10) || 10));
+    res.json({ success: true, data: { kw, list: await searchApps(kw, limit) } });
   } catch (err) {
     res.status(502).json({ success: false, error: err.message });
   }
